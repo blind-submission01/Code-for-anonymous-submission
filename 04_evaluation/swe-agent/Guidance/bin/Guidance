@@ -1,0 +1,99 @@
+#!/usr/bin/env python3
+
+import argparse
+import re
+import sys
+import time
+import json
+import urllib.request
+from typing import Optional
+
+_MODEL_ID = "two_stage_simpo_14B"
+_BASE_URL = "http://10.249.42.56:6010/v1"
+_TIMEOUT_S = 30.0
+_RETRIES = 3
+
+GUIDANCE_SYSTEM_PROMPT = """You are a code analysis expert specializing in bug repair."""
+
+def _read_text_input(*, text: Optional[str], file) -> str:
+    if text is not None:
+        return text.strip()
+    if file is not None:
+        return file.read().strip()
+    if not sys.stdin.isatty():
+        return sys.stdin.read().strip()
+    return ""
+
+def _build_user_prompt(*, issue_text: str, code_snippet: str) -> str:
+        
+    parts = [
+    " You will be given: \\n- A GitHub issue description \\n- Several segment groups: each contains a suspicious code slice and its related supplementary slice. \\nPerform the following Task: \\nGenerate Natural Language Description: Generate a concise but sufficient, developer-friendly description including both **the issue root cause** and **the proposed repair suggestion**.",
+    "# GitHub Issue Description:",
+    issue_text,
+    "# Segments Groups:",
+    code_snippet
+    ]    
+
+    if issue_text.strip() and code_snippet.strip():
+        return "\\n".join(parts) + "\\n"
+    return "user prompt build error"
+
+def _normalize_guidance(text: str) -> str:
+    text = (text or "").replace("\r\n", "\n").replace("\r", "\n")
+    text = text.replace("```", "")
+
+    text = re.sub(r"(?im)^\s*#\s*root\s*cause\s*$", "ROOT_CAUSE:", text)
+    text = re.sub(r"(?im)^\s*#\s*repair\s*suggestion\s*$", "REPAIR_SUGGESTION:", text)
+
+    return text.strip()
+
+
+def _post_json(url: str, payload: dict, timeout_s: float) -> dict:
+    data = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(
+        url,
+        data=data,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=timeout_s) as resp:
+        body = resp.read().decode("utf-8", errors="replace")
+        return json.loads(body or "{}")
+
+def main(argv=None) -> int:
+    p = argparse.ArgumentParser()
+    issue_group = p.add_mutually_exclusive_group()
+    issue_group.add_argument("--issue", default=None)
+    issue_group.add_argument("--issue-file", type=argparse.FileType("r", encoding="utf-8"), default=None)
+    p.add_argument("--code", default=None)
+    p.add_argument("--code-file", type=argparse.FileType("r", encoding="utf-8"), default=None)
+    args = p.parse_args(argv)
+
+    issue_text = _read_text_input(text=args.issue, file=args.issue_file)
+    code_snippet = _read_text_input(text=args.code, file=args.code_file)
+    if not issue_text:
+        raise SystemExit("No issue provided. Use --issue/--issue-file or pipe stdin.")
+
+    payload = {
+        "model": _MODEL_ID,
+        "messages": [
+            {"role": "system", "content": GUIDANCE_SYSTEM_PROMPT},
+            {"role": "user", "content": _build_user_prompt(issue_text=issue_text, code_snippet=code_snippet)},
+        ],
+    }
+
+    last_err = None
+    for attempt in range(_RETRIES):
+        try:
+            data = _post_json(_BASE_URL.rstrip("/") + "/chat/completions", payload, timeout_s=_TIMEOUT_S)
+            content = (data.get("choices") or [{}])[0].get("message", {}).get("content", "") or ""
+            sys.stdout.write(_normalize_guidance(str(content)) + "\\n")
+            return 0
+        except Exception as e:
+            last_err = e
+            time.sleep(2 * (attempt + 1))
+
+    raise SystemExit(f"Guidance failed after {_RETRIES} retries: {last_err!r}")
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -1,0 +1,17 @@
+tools:
+  Guidance:
+    signature: "Guidance --issue-file <issue_file_path> --code-file <code_file_path>"
+    docstring: "Generate issue natural-language Guidance including root cause analysis and proposed repair suggestions."
+    arguments:
+      - name: issue_file_path
+        type: string
+        description: "The file path for Issue problem statement."
+        required: true
+        # Signature already includes the flag, so we only render the value here.
+        argument_format: "{{value}}"
+      - name: code_file_path
+        type: string
+        description: "The file path for Relevant code snippets."
+        required: true
+        # Signature already includes the flag, so we only render the value here.
+        argument_format: "{{value}}"
