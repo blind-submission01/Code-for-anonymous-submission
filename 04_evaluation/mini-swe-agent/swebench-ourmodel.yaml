@@ -1,0 +1,391 @@
+agent:
+  system_template: |
+    You are a helpful assistant that can interact multiple times with a computer shell to solve programming tasks.
+    Your response must contain exactly ONE bash code block with ONE command (or commands connected with && or ||).
+
+    Include a THOUGHT section before your command where you explain your reasoning process.
+    Format your response as shown in <format_example>.
+
+    <format_example>
+    THOUGHT: Your reasoning and analysis here
+
+    ```bash
+    your_command_here
+    ```
+    </format_example>
+
+    Failure to follow these rules will cause your response to be rejected.
+  instance_template: |
+    <pr_description>
+    Consider the following PR description:
+    {{task}}
+    </pr_description>
+
+    <instructions>
+    # Task Instructions
+
+    ## Overview
+    You're a software engineer interacting continuously with a computer by submitting commands.
+    You'll be helping implement necessary changes to meet requirements in the PR description.
+    Your task is specifically to make changes to non-test files in the current directory in order to fix the issue described in the PR description in a way that is general and consistent with the codebase.
+
+    IMPORTANT: This is an interactive process where you will think and issue ONE command, see its result, then think and issue your next command.
+
+    For each response:
+    1. Include a THOUGHT section explaining your reasoning and what you're trying to accomplish
+    2. Provide exactly ONE bash command to execute
+
+    ## Important Boundaries
+    - MODIFY: Regular source code files in /testbed (this is the working directory for all your subsequent commands)
+    - DO NOT MODIFY: Tests, configuration files (pyproject.toml, setup.cfg, etc.)
+
+    ## Recommended Workflow
+    1. Analyze the codebase by finding and reading relevant files
+    2. Create a script to reproduce the issue
+    3. Edit the source code to resolve the issue
+    4. Verify your fix works by running your script again
+    5. Test edge cases to ensure your fix is robust
+
+    Encouragment in any step of your Workflow (Especially, begin with the task, or after finding the precise suspicious code):
+        Call the `Guidance` tool to get:
+            - ROOT_CAUSE (root cause analysis of the issue)
+            - REPAIR_SUGGESTION (proposed repair suggestions)
+
+    Recommended usage (single response/action, still follows the "ONE bash block" rule):
+
+    ```bash
+    cat > /tmp/issue.txt <<'EOF'
+    <paste the PR description / error logs / traceback here>
+    EOF
+    cat > /tmp/code.txt <<'EOF'
+    <paste the precise suspicious code here>
+    EOF
+    Guidance --issue-file /tmp/issue.txt --code-file /tmp/code.txt
+    ```
+
+
+    ## Command Execution Rules
+    You are operating in an environment where
+    1. You write a single command
+    2. The system executes that command in a subshell
+    3. You see the result
+    4. You write your next command
+
+    Each response should include:
+    1. A **THOUGHT** section where you explain your reasoning and plan
+    2. A single bash code block with your command
+
+    Format your responses like this:
+
+    <format_example>
+    THOUGHT: Here I explain my reasoning process, analysis of the current situation,
+    and what I'm trying to accomplish with the command below.
+
+    ```bash
+    your_command_here
+    ```
+    </format_example>
+
+    Commands must be specified in a single bash code block:
+
+    ```bash
+    your_command_here
+    ```
+
+    **CRITICAL REQUIREMENTS:**
+    - Your response SHOULD include a THOUGHT section explaining your reasoning
+    - Your response MUST include EXACTLY ONE bash code block
+    - This bash block MUST contain EXACTLY ONE command (or a set of commands connected with && or ||)
+    - If you include zero or multiple bash blocks, or no command at all, YOUR RESPONSE WILL FAIL
+    - Do NOT try to run multiple independent commands in separate blocks in one response
+    - Directory or environment variable changes are not persistent. Every action is executed in a new subshell.
+    - However, you can prefix any action with `MY_ENV_VAR=MY_VALUE cd /path/to/working/dir && ...` or write/load environment variables from files
+    - The Root Cuase and Repair Suggestion by Guidance may not always correct, so Just Merely as a reference or inspiration.
+
+    Example of a CORRECT response:
+    <example_response>
+    THOUGHT: I need to understand the structure of the repository first. Let me check what files are in the current directory to get a better understanding of the codebase.
+
+    ```bash
+    ls -la
+    ```
+    </example_response>
+
+    Example of an INCORRECT response:
+    <example_response>
+    THOUGHT: I need to examine the codebase and then look at a specific file. I'll run multiple commands to do this.
+
+    ```bash
+    ls -la
+    ```
+
+    Now I'll read the file:
+
+    ```bash
+    cat file.txt
+    ```
+    </example_response>
+
+    If you need to run multiple commands, either:
+    1. Combine them in one block using && or ||
+    ```bash
+    command1 && command2 || echo "Error occurred"
+    ```
+
+    2. Wait for the first command to complete, see its output, then issue the next command in your following response.
+
+    ## Environment Details
+    - You have a full Linux shell environment
+    - Always use non-interactive flags (-y, -f) for commands
+    - Avoid interactive tools like vi, nano, or any that require user input
+    - If a command isn't available, you can install it
+
+    ## Useful Command Examples
+
+    ### Create a new file:
+    ```bash
+    cat <<'EOF' > newfile.py
+    import numpy as np
+    hello = "world"
+    print(hello)
+    EOF
+    ```
+
+    ### Edit files with sed:
+    ```bash
+    # Replace all occurrences
+    sed -i 's/old_string/new_string/g' filename.py
+
+    # Replace only first occurrence
+    sed -i 's/old_string/new_string/' filename.py
+
+    # Replace first occurrence on line 1
+    sed -i '1s/old_string/new_string/' filename.py
+
+    # Replace all occurrences in lines 1-10
+    sed -i '1,10s/old_string/new_string/g' filename.py
+    ```
+
+    ### View file content:
+    ```bash
+    # View specific lines with numbers
+    nl -ba filename.py | sed -n '10,20p'
+    ```
+
+    ### Seek guidance
+    ```bash
+    # Prepare issue description
+    cat > /tmp/issue.txt <<'EOF'
+    <paste the PR description / error logs / traceback here>
+    EOF
+    # Prepare reference code
+    cat > /tmp/code.txt <<'EOF'
+    <paste the precise suspicious code here>
+    EOF
+    # Run Guidance for root Cause and repair suggestion
+    Guidance --issue-file /tmp/issue.txt --code-file /tmp/code.txt
+    ```
+
+    ### Any other command you want to run
+    ```bash
+    anything
+    ```
+
+    ## Submission
+    When you've completed your work (reading, editing, testing), and cannot make further progress
+    issue exactly the following command:
+
+    ```bash
+    echo COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT && git add -A && git diff --cached
+    ```
+
+    This command will submit your work.
+    You cannot continue working (reading, editing, testing) in any way on this task after submitting.
+    </instructions>
+  action_observation_template: |
+    <returncode>{{output.returncode}}</returncode>
+    {% if output.output | length < 10000 -%}
+    <output>
+    {{ output.output -}}
+    </output>
+    {%- else -%}
+    <warning>
+    The output of your last command was too long.
+    Please try a different command that produces less output.
+    If you're looking at a file you can try use head, tail or sed to view a smaller number of lines selectively.
+    If you're using grep or find and it produced too much output, you can use a more selective search pattern.
+    If you really need to see something from the full command's output, you can redirect output to a file and then search in that file.
+    </warning>
+    {%- set elided_chars = output.output | length - 10000 -%}
+    <output_head>
+    {{ output.output[:5000] }}
+    </output_head>
+    <elided_chars>
+    {{ elided_chars }} characters elided
+    </elided_chars>
+    <output_tail>
+    {{ output.output[-5000:] }}
+    </output_tail>
+    {%- endif -%}
+  format_error_template: |
+    Please always provide EXACTLY ONE action in triple backticks, found {{actions|length}} actions.
+
+    Please format your action in triple backticks as shown in <response_example>.
+
+    <response_example>
+    Here are some thoughts about why you want to perform the action.
+
+    ```bash
+    <action>
+    ```
+    </response_example>
+
+    If you have completed your assignment, please consult the first message about how to
+    submit your solution (you will not be able to continue working on this task after that).
+  timeout_template: |
+    The last command <command>{{action['action']}}</command> timed out and has been killed.
+    The output of the command was:
+    {% if output | length < 10000 -%}
+    <output>
+    {{output}}
+    </output>
+    {%- else -%}
+    <warning>Output was too long and has been truncated.</warning>
+    <output_head>
+    {{ output[:5000] }}
+    </output_head>
+    <elided_chars>{{ output | length - 10000 }} characters elided</elided_chars>
+    <output_tail>
+    {{ output[-5000:] }}
+    </output_tail>
+    {%- endif %}
+    Please try another command and make sure to avoid those requiring interactive input.
+  step_limit: 250
+  cost_limit: 3.
+
+run:
+
+  env_startup_command: |
+    cat > /tmp/Guidance.py <<'PY'
+    import argparse
+    import re
+    import sys
+    import time
+    import json
+    import urllib.request
+    from typing import Optional
+
+    _MODEL_ID = "two_stage_simpo_14B"
+    _BASE_URL = "http://10.249.42.56:6010/v1"
+    _TIMEOUT_S = 30.0
+    _RETRIES = 3
+
+    GUIDANCE_SYSTEM_PROMPT = """You are a code analysis expert specializing in bug repair."""
+
+    def _read_text_input(*, text: Optional[str], file) -> str:
+        if text is not None:
+            return text.strip()
+        if file is not None:
+            return file.read().strip()
+        if not sys.stdin.isatty():
+            return sys.stdin.read().strip()
+        return ""
+
+    def _build_user_prompt(*, issue_text: str, code_snippet: str) -> str:
+        
+        parts = [
+        " You will be given: \\n- A GitHub issue description \\n- Several segment groups: each contains a suspicious code slice and its related supplementary slice. \\nPerform the following Task: \\nGenerate Natural Language Description: Generate a concise but sufficient, developer-friendly description including both **the issue root cause** and **the proposed repair suggestion**.",
+        "# GitHub Issue Description:",
+        issue_text,
+        "# Segments Groups:",
+        code_snippet
+        ]
+
+        if issue_text.strip() and code_snippet.strip():
+            return "\\n".join(parts) + "\\n"
+        return "user prompt build error"
+
+    def _normalize_guidance(text: str) -> str:
+        text = (text or "").replace("\r\n", "\n").replace("\r", "\n")
+        text = text.replace("```", "")
+
+        text = re.sub(r"(?im)^\s*#\s*root\s*cause\s*$", "ROOT_CAUSE:", text)
+        text = re.sub(r"(?im)^\s*#\s*repair\s*suggestion\s*$", "REPAIR_SUGGESTION:", text)
+
+        return text.strip()
+
+
+    def _post_json(url: str, payload: dict, timeout_s: float) -> dict:
+        data = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(
+            url,
+            data=data,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=timeout_s) as resp:
+            body = resp.read().decode("utf-8", errors="replace")
+            return json.loads(body or "{}")
+
+    def main(argv=None) -> int:
+        p = argparse.ArgumentParser()
+        issue_group = p.add_mutually_exclusive_group()
+        issue_group.add_argument("--issue", default=None)
+        issue_group.add_argument("--issue-file", type=argparse.FileType("r", encoding="utf-8"), default=None)
+        p.add_argument("--code", default=None)
+        p.add_argument("--code-file", type=argparse.FileType("r", encoding="utf-8"), default=None)
+        args = p.parse_args(argv)
+
+        issue_text = _read_text_input(text=args.issue, file=args.issue_file)
+        code_snippet = _read_text_input(text=args.code, file=args.code_file)
+        if not issue_text:
+            raise SystemExit("No issue provided. Use --issue/--issue-file or pipe stdin.")
+
+        payload = {
+            "model": _MODEL_ID,
+            "messages": [
+                {"role": "system", "content": GUIDANCE_SYSTEM_PROMPT},
+                {"role": "user", "content": _build_user_prompt(issue_text=issue_text, code_snippet=code_snippet)},
+            ],
+        }
+
+        last_err = None
+        for attempt in range(_RETRIES):
+            try:
+                data = _post_json(_BASE_URL.rstrip("/") + "/chat/completions", payload, timeout_s=_TIMEOUT_S)
+                content = (data.get("choices") or [{}])[0].get("message", {}).get("content", "") or ""
+                sys.stdout.write(_normalize_guidance(str(content)) + "\\n")
+                return 0
+            except Exception as e:
+                last_err = e
+                time.sleep(2 * (attempt + 1))
+
+        raise SystemExit(f"Guidance failed after {_RETRIES} retries: {last_err!r}")
+
+    if __name__ == "__main__":
+        raise SystemExit(main())
+    PY
+    python /tmp/Guidance.py --help >/dev/null || exit 1
+    cat > /usr/local/bin/Guidance <<'SH'
+    #!/usr/bin/env sh
+    exec python /tmp/Guidance.py "$@"
+    SH
+    chmod +x /usr/local/bin/Guidance
+
+environment:
+  cwd: "/testbed"
+  timeout: 60
+  pull_timeout: 1200
+  env:
+    PAGER: cat
+    MANPAGER: cat
+    LESS: -R
+    PIP_PROGRESS_BAR: 'off'
+    TQDM_DISABLE: '1'
+  environment_class: docker
+
+model:
+  model_name: "anthropic/claude-sonnet-4-5-20250929"
+  model_kwargs:
+    drop_params: true
+    temperature: 0.0
